@@ -210,39 +210,93 @@ class HeroImageGenerator:
 
         return all_photos[0]
 
-    def _fetch_web_image(self, query: str) -> Optional[str]:
-        """Searches and fetches high-res photo for news entities or public figures."""
+    def _fetch_wikimedia_image(self, query: str) -> Optional[str]:
+        """Fetches high-resolution photo from Wikipedia for notable public figures or companies."""
+        if not query or len(query.strip()) < 2:
+            return None
+        clean_query = query.strip()
         try:
-            url = f"https://www.bing.com/images/search?q={urllib.parse.quote(query + ' portrait hd')}&form=HDRSC2&first=1"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                html = resp.read().decode("utf-8", errors="ignore")
-                murls = re.findall(r'murl&quot;:&quot;(http[^&]+)&quot;', html)
-                if not murls:
-                    murls = re.findall(r'\"murl\":\"(http[^\"]+)\"', html)
-                if murls:
-                    for murl in murls[:5]:
-                        if not any(bad in murl.lower() for bad in ["logo", "icon", "svg", "vector"]):
-                            return murl
-        except Exception as e:
-            print(f"[Warning] Web image search failed for '{query}': {e}")
-
-        try:
-            wiki_url = f"https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch={urllib.parse.quote(query)}&gsrlimit=1&prop=pageimages&pithumbsize=1200&format=json"
-            req = urllib.request.Request(wiki_url, headers={"User-Agent": "SocialMediaHeroGen/1.0"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
+            wiki_url = f"https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch={urllib.parse.quote(clean_query)}&gsrlimit=3&prop=pageimages&pithumbsize=1600&format=json"
+            req = urllib.request.Request(wiki_url, headers={"User-Agent": "SocialMediaHeroGen/2.0 (contact@kaushaltalks.com)"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())
                 pages = data.get("query", {}).get("pages", {})
                 for _, pdata in pages.items():
                     thumb = pdata.get("thumbnail", {}).get("source")
-                    if thumb:
+                    if thumb and not any(bad in thumb.lower() for bad in ["flag", "logo.svg", "icon", ".svg"]):
+                        print(f"[HeroGen] Found Wikimedia image for '{clean_query}': {thumb[:60]}...")
                         return thumb
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[HeroGen] Wikimedia search failed for '{clean_query}': {e}")
+        return None
 
+    def _fetch_bing_image(self, query: str) -> Optional[str]:
+        """Searches Bing for high-resolution photo of subject or scene."""
+        if not query or len(query.strip()) < 2:
+            return None
+        clean_query = query.strip()
+        try:
+            url = f"https://www.bing.com/images/search?q={urllib.parse.quote(clean_query)}&form=HDRSC2&first=1"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            }
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                html = resp.read().decode("utf-8", errors="ignore")
+                murls = re.findall(r'murl&quot;:&quot;(http[^&]+)&quot;', html)
+                if not murls:
+                    murls = re.findall(r'\"murl\":\"(http[^\"]+)\"', html)
+                for murl in murls[:10]:
+                    murl_low = murl.lower()
+                    if not any(bad in murl_low for bad in [".svg", "logo", "icon", "vector", "banner", "1x1", "favicon"]):
+                        print(f"[HeroGen] Found Bing web image for '{clean_query}': {murl[:60]}...")
+                        return murl
+        except Exception as e:
+            print(f"[HeroGen] Bing image search failed for '{clean_query}': {e}")
+        return None
+
+    def _generate_ai_scene_image(self, prompt: str) -> Optional[str]:
+        """Generates custom 1080x1350 cinematic scene visual using AI image models."""
+        if not prompt or len(prompt.strip()) < 5:
+            return None
+        clean_prompt = prompt.strip()
+        # Add high fidelity cues if not present
+        if "photorealistic" not in clean_prompt.lower() and "cinematic" not in clean_prompt.lower():
+            clean_prompt += ", cinematic lighting, 8k, photorealistic, dramatic atmosphere"
+        
+        encoded_prompt = urllib.parse.quote(clean_prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1080&height=1350&nologo=true&model=flux&enhance=true"
+        
+        try:
+            print(f"[HeroGen] Generating AI scene visual for: '{prompt[:70]}...'")
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                img_bytes = resp.read()
+                if len(img_bytes) > 5000:
+                    b64 = base64.b64encode(img_bytes).decode("utf-8")
+                    print(f"[HeroGen] Successfully generated AI scene image ({len(img_bytes)} bytes)")
+                    return f"data:image/jpeg;base64,{b64}"
+        except Exception as e:
+            print(f"[HeroGen] AI image generation timed out or failed: {e}")
+        return None
+
+    def _url_to_data_uri(self, image_url: str) -> Optional[str]:
+        """Downloads an image URL and converts to base64 data URI."""
+        if not image_url:
+            return None
+        try:
+            req = urllib.request.Request(
+                image_url,
+                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                img_bytes = resp.read()
+                if len(img_bytes) > 2000:
+                    mime = "image/png" if image_url.lower().endswith(".png") else "image/jpeg"
+                    b64 = base64.b64encode(img_bytes).decode("utf-8")
+                    return f"data:{mime};base64,{b64}"
+        except Exception as e:
+            print(f"[HeroGen] Failed downloading image URL '{image_url[:60]}...': {e}")
         return None
 
     def generate_hero_image(
@@ -257,12 +311,14 @@ class HeroImageGenerator:
         batch_folder.mkdir(parents=True, exist_ok=True)
 
         context_type = hero_info.get("context_type", "personal").lower()
-        subject_name = hero_info.get("subject_name", "Kaushal")
-        category_tag = hero_info.get("category_tag", "CASE STUDY").upper()
-        headline_text = hero_info.get("headline_hook", "THE M LESSON IN SILENCE")
+        subject_name = hero_info.get("subject_name", "").strip()
+        category_tag = hero_info.get("category_tag", "INSIGHT").upper()
+        headline_text = hero_info.get("headline_hook", "THE LESSON IN SILENCE")
         subtext = hero_info.get("subtext", "The counter-intuitive truth 99% of people miss.")
         gradient_style = hero_info.get("preferred_gradient", "black").lower()
         expression = hero_info.get("user_expression", "serious")
+        search_query = hero_info.get("image_search_query", "").strip()
+        visual_scene_prompt = hero_info.get("visual_scene_prompt", "").strip()
 
         # Format Headline HTML & Highlights
         highlight_match = re.search(r'[\{\[](.*?)[\}\]]', headline_text)
@@ -285,7 +341,6 @@ class HeroImageGenerator:
             accent_color = "#34d399"
             highlight_color = "#4ade80"
             highlight_glow = "rgba(74, 222, 128, 0.4)"
-            category_icon = "⚡"
         elif "blue" in gradient_style or "cyan" in gradient_style:
             gradient_css = "linear-gradient(to top, #030a1a 0%, rgba(3, 10, 26, 0.96) 28%, rgba(8, 28, 68, 0.75) 55%, rgba(8, 28, 68, 0.25) 75%, rgba(0,0,0,0) 100%)"
             badge_bg = "rgba(56, 189, 248, 0.15)"
@@ -294,7 +349,6 @@ class HeroImageGenerator:
             accent_color = "#38bdf8"
             highlight_color = "#38bdf8"
             highlight_glow = "rgba(56, 189, 248, 0.45)"
-            category_icon = "🔥"
         else: # Black / Charcoal
             gradient_css = "linear-gradient(to top, #000000 0%, rgba(0, 0, 0, 0.96) 28%, rgba(12, 12, 12, 0.75) 55%, rgba(12, 12, 12, 0.25) 75%, rgba(0,0,0,0) 100%)"
             badge_bg = "rgba(250, 204, 21, 0.15)"
@@ -303,14 +357,15 @@ class HeroImageGenerator:
             accent_color = "#facc15"
             highlight_color = "#facc15"
             highlight_glow = "rgba(250, 204, 21, 0.45)"
-            category_icon = "📌"
 
-        # Determine Image Source
+        # Multi-Tier Context-Aware Image Selection
         image_data_uri = ""
         object_position = "center top"
         image_filter = "contrast(1.05) brightness(0.95)"
 
-        if context_type == "personal" or "kaushal" in subject_name.lower():
+        # Tier 1: Personal Reflection / Kaushal
+        if context_type == "personal" or (subject_name and "kaushal" in subject_name.lower()):
+            print(f"[HeroGen] Context is personal -> Using Kaushal's photo ({expression})")
             photo_path = self._get_user_photo(expression)
             if photo_path and photo_path.exists():
                 try:
@@ -322,22 +377,55 @@ class HeroImageGenerator:
                 except Exception as e:
                     print(f"[Warning] Error loading user image {photo_path}: {e}")
 
-        if not image_data_uri:
-            search_query = hero_info.get("image_search_query") or subject_name
-            web_url = self._fetch_web_image(search_query)
-            if web_url:
-                try:
-                    req = urllib.request.Request(web_url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=8) as resp:
-                        img_bytes = resp.read()
-                        b64 = base64.b64encode(img_bytes).decode("utf-8")
-                        image_data_uri = f"data:image/jpeg;base64,{b64}"
-                        object_position = "center 20%"
-                except Exception as e:
-                    print(f"[Warning] Error downloading web image {web_url}: {e}")
+        # Tier 2: Specific Public Figure or Entity (e.g. Sam Altman, Sundar Pichai, Vineeta Singh, Nvidia)
+        elif context_type in ["entity", "news_or_entity", "news"]:
+            lookup_term = subject_name or search_query
+            print(f"[HeroGen] Context is entity/news -> Searching for '{lookup_term}'")
+            # 2a. Check Wikimedia
+            wiki_url = self._fetch_wikimedia_image(lookup_term)
+            if wiki_url:
+                image_data_uri = self._url_to_data_uri(wiki_url)
+                object_position = "center 15%"
+            
+            # 2b. If not on Wiki, check Bing image search
+            if not image_data_uri:
+                bing_term = search_query if search_query else f"{lookup_term} hd"
+                bing_url = self._fetch_bing_image(bing_term)
+                if bing_url:
+                    image_data_uri = self._url_to_data_uri(bing_url)
+                    object_position = "center 20%"
 
+            # 2c. Fallback to AI generation of the scene/subject
+            if not image_data_uri:
+                ai_prompt = visual_scene_prompt or f"Cinematic photorealistic portrait of {lookup_term}, dark moody lighting, 8k"
+                image_data_uri = self._generate_ai_scene_image(ai_prompt)
+
+        # Tier 3: Concept / Scene / Topic (e.g. US bank layoffs, AI coding, burnout, remote work)
+        else:
+            print(f"[HeroGen] Context is concept/scene -> Generating AI visual / finding matching scene")
+            # 3a. Generate AI scene image
+            ai_prompt = visual_scene_prompt or f"Cinematic atmospheric scene of {headline_text.replace('{','').replace('}','')}, dark moody background, high contrast, 8k photorealistic"
+            image_data_uri = self._generate_ai_scene_image(ai_prompt)
+
+            # 3b. Fallback to Bing image search for the scene
+            if not image_data_uri and search_query:
+                bing_url = self._fetch_bing_image(search_query)
+                if bing_url:
+                    image_data_uri = self._url_to_data_uri(bing_url)
+                    object_position = "center 20%"
+
+        # Tier 4: Global Fallback to Kaushal's Photo if all else failed
         if not image_data_uri:
-            image_data_uri = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350'><rect width='100%' height='100%' fill='%23080c14'/></svg>"
+            print("[HeroGen] Web/AI fetch unavailable -> Falling back to Kaushal's high-res photo")
+            photo_path = self._get_user_photo(expression)
+            if photo_path and photo_path.exists():
+                with open(photo_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("utf-8")
+                mime = "image/jpeg" if photo_path.suffix.lower() in [".jpg", ".jpeg"] else "image/png"
+                image_data_uri = f"data:{mime};base64,{b64}"
+                object_position = "center 15%"
+            else:
+                image_data_uri = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350'><rect width='100%' height='100%' fill='%23080c14'/></svg>"
 
         clean_headline_len = len(re.sub(r'<[^>]+>', '', headline_text))
         if clean_headline_len > 45:
@@ -367,7 +455,7 @@ class HeroImageGenerator:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={"width": 1080, "height": 1350}, device_scale_factor=2)
             page.set_content(html_content)
-            page.wait_for_timeout(600)
+            page.wait_for_timeout(700)
             page.screenshot(path=str(output_path))
             browser.close()
 

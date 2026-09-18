@@ -71,6 +71,12 @@ Your task is to take the user's raw dictated thoughts, unstructured stream of co
    - Subtitle preview (< 90 chars).
    - Compelling narrative hook + 3 key analytical takeaways + actionable playbook.
 
+7. **Hero Hook Image (1080x1350 High-Contrast Visual)**:
+   - Must be 100% relevant and tailored to the exact topic/news subject.
+   - `context_type`: "personal" (for advice/reflections from Kaushal), "entity" (for news on public figures, founders, or companies e.g. Sam Altman, Sundar Pichai, Vineeta Singh, Nvidia), or "concept" (for industry trends, corporate news, layoffs, remote work, AI agents, burnout).
+   - `visual_scene_prompt`: Detailed cinematic visual scene description for photorealistic image rendering (e.g. "cinematic wide shot of an empty modern corporate tech office at night, glowing laptop screen, dark moody lighting, 8k photorealistic").
+
+
 ### RULES & HOOK FRAMEWORKS:
 {self.knowledge.get("hooks_and_triggers", "")}
 
@@ -132,13 +138,14 @@ You MUST respond with a valid JSON object strictly matching this schema:
     "body_markdown": "Full formatted newsletter markdown with headings and takeaways"
   }},
   "hero_image": {{
-    "context_type": "personal OR news_or_entity",
-    "subject_name": "Name of person or company (e.g. Kaushal, Vineeta Singh, Sam Altman, SUGAR Cosmetics)",
-    "category_tag": "CASE STUDY | HARD TRUTH | AI STRATEGY | FRAMEWORK | FOUNDER LESSON",
+    "context_type": "personal | entity | concept",
+    "subject_name": "Name of person or company if applicable (e.g. Kaushal, Vineeta Singh, Sam Altman, SUGAR Cosmetics)",
+    "category_tag": "CASE STUDY | HARD TRUTH | AI STRATEGY | FRAMEWORK | FOUNDER LESSON | MARKET SHIFT",
     "headline_hook": "Scroll-stopping curiosity headline in 4-8 words with {{highlighted word in braces}}",
     "subtext": "1-line teaser explaining the tension/lesson to make viewers click and read",
     "preferred_gradient": "black | blue | emerald",
-    "image_search_query": "Clean web image search query if news_or_entity (e.g. 'Vineeta Singh SUGAR Cosmetics portrait')",
+    "image_search_query": "Clean 2-4 word web image search query (e.g. 'Sam Altman OpenAI' or 'corporate office dark empty desks')",
+    "visual_scene_prompt": "Cinematic visual description for AI generation if concept/news event (e.g. 'cinematic wide shot of an empty modern corporate office at night with glowing laptop screen, dark moody lighting, 8k photorealistic')",
     "user_expression": "serious | smiling | subtle_smile | side_profile"
   }}
 }}
