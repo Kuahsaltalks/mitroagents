@@ -72,9 +72,9 @@ Your task is to take the user's raw dictated thoughts, unstructured stream of co
    - Compelling narrative hook + 3 key analytical takeaways + actionable playbook.
 
 7. **Hero Hook Image (1080x1350 High-Contrast Visual)**:
-   - Must be 100% relevant and tailored to the exact topic/news subject.
-   - `context_type`: "personal" (for advice/reflections from Kaushal), "entity" (for news on public figures, founders, or companies e.g. Sam Altman, Sundar Pichai, Vineeta Singh, Nvidia), or "concept" (for industry trends, corporate news, layoffs, remote work, AI agents, burnout).
-   - `visual_scene_prompt`: Detailed cinematic visual scene description for photorealistic image rendering (e.g. "cinematic wide shot of an empty modern corporate tech office at night, glowing laptop screen, dark moody lighting, 8k photorealistic").
+   - Must be 100% relevant and tailored to the exact topic, scene, mindset, or news subject.
+   - ALWAYS provide a vivid, artistic, cinematic `visual_scene_prompt` describing the mood, subject, lighting, and dramatic visual representation of the post's core insight (e.g. 'cinematic wide shot of a solitary chess player making a bold move under dramatic moody lighting, 8k photorealistic' or 'a lone engineer building software late at night with multiple glowing screens, moody atmospheric lighting, 8k photorealistic').
+   - `context_type`: "entity" (if focused on a public figure/brand e.g. Sam Altman, Nvidia) or "concept" (for all personal advice, mindset lessons, industry shifts, developer frameworks, reflections).
 
 
 ### RULES & HOOK FRAMEWORKS:

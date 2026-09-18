@@ -358,36 +358,22 @@ class HeroImageGenerator:
             highlight_color = "#facc15"
             highlight_glow = "rgba(250, 204, 21, 0.45)"
 
-        # Multi-Tier Context-Aware Image Selection
+        # Fully Dynamic Context-Aware Image Generation & Retrieval
         image_data_uri = ""
         object_position = "center top"
         image_filter = "contrast(1.05) brightness(0.95)"
 
-        # Tier 1: Personal Reflection / Kaushal
-        if context_type == "personal" or (subject_name and "kaushal" in subject_name.lower()):
-            print(f"[HeroGen] Context is personal -> Using Kaushal's photo ({expression})")
-            photo_path = self._get_user_photo(expression)
-            if photo_path and photo_path.exists():
-                try:
-                    with open(photo_path, "rb") as f:
-                        b64 = base64.b64encode(f.read()).decode("utf-8")
-                    mime = "image/jpeg" if photo_path.suffix.lower() in [".jpg", ".jpeg"] else "image/png"
-                    image_data_uri = f"data:{mime};base64,{b64}"
-                    object_position = "center 15%"
-                except Exception as e:
-                    print(f"[Warning] Error loading user image {photo_path}: {e}")
-
-        # Tier 2: Specific Public Figure or Entity (e.g. Sam Altman, Sundar Pichai, Vineeta Singh, Nvidia)
-        elif context_type in ["entity", "news_or_entity", "news"]:
+        # 1. Public Figure or Known Entity (e.g. Sam Altman, Sundar Pichai, Vineeta Singh, Nvidia, Apple)
+        if context_type in ["entity", "news_or_entity", "news"] and subject_name and "kaushal" not in subject_name.lower():
             lookup_term = subject_name or search_query
-            print(f"[HeroGen] Context is entity/news -> Searching for '{lookup_term}'")
-            # 2a. Check Wikimedia
+            print(f"[HeroGen] Entity subject detected -> Searching for '{lookup_term}'")
+            # Try Wikimedia
             wiki_url = self._fetch_wikimedia_image(lookup_term)
             if wiki_url:
                 image_data_uri = self._url_to_data_uri(wiki_url)
                 object_position = "center 15%"
             
-            # 2b. If not on Wiki, check Bing image search
+            # If not on Wiki, check Bing search
             if not image_data_uri:
                 bing_term = search_query if search_query else f"{lookup_term} hd"
                 bing_url = self._fetch_bing_image(bing_term)
@@ -395,28 +381,28 @@ class HeroImageGenerator:
                     image_data_uri = self._url_to_data_uri(bing_url)
                     object_position = "center 20%"
 
-            # 2c. Fallback to AI generation of the scene/subject
+            # Fallback to AI generation of the entity scene
             if not image_data_uri:
                 ai_prompt = visual_scene_prompt or f"Cinematic photorealistic portrait of {lookup_term}, dark moody lighting, 8k"
                 image_data_uri = self._generate_ai_scene_image(ai_prompt)
 
-        # Tier 3: Concept / Scene / Topic (e.g. US bank layoffs, AI coding, burnout, remote work)
-        else:
-            print(f"[HeroGen] Context is concept/scene -> Generating AI visual / finding matching scene")
-            # 3a. Generate AI scene image
-            ai_prompt = visual_scene_prompt or f"Cinematic atmospheric scene of {headline_text.replace('{','').replace('}','')}, dark moody background, high contrast, 8k photorealistic"
+        # 2. Bespoke Contextual AI Scene Generation (for all advice, personal insights, news, concepts, frameworks)
+        if not image_data_uri:
+            print(f"[HeroGen] Generating bespoke AI visual for context...")
+            clean_head = headline_text.replace('{', '').replace('}', '').replace('[', '').replace(']', '')
+            ai_prompt = visual_scene_prompt or f"Cinematic wide shot representing {clean_head}, dark moody lighting, dramatic atmosphere, 8k photorealistic"
             image_data_uri = self._generate_ai_scene_image(ai_prompt)
 
-            # 3b. Fallback to Bing image search for the scene
-            if not image_data_uri and search_query:
-                bing_url = self._fetch_bing_image(search_query)
-                if bing_url:
-                    image_data_uri = self._url_to_data_uri(bing_url)
-                    object_position = "center 20%"
+        # 3. Fallback to contextual Web Search if AI generation was unavailable
+        if not image_data_uri and search_query:
+            print(f"[HeroGen] Fallback -> Searching web for '{search_query}'")
+            bing_url = self._fetch_bing_image(search_query)
+            if bing_url:
+                image_data_uri = self._url_to_data_uri(bing_url)
+                object_position = "center 20%"
 
-        # Tier 4: Global Fallback to Kaushal's Photo if all else failed
+        # 4. Final safety fallback
         if not image_data_uri:
-            print("[HeroGen] Web/AI fetch unavailable -> Falling back to Kaushal's high-res photo")
             photo_path = self._get_user_photo(expression)
             if photo_path and photo_path.exists():
                 with open(photo_path, "rb") as f:
