@@ -303,11 +303,11 @@ async def handle_linkedin_creators_engagement(message, post_text: str):
             comment = c.get("comment", "")
             wc = c.get("word_count", len(comment.split()))
 
-            # Automate via active Google Chrome
+            # Automate via active Google Chrome (Likes post and publishes comment live)
             try:
-                engage_res = await asyncio.to_thread(agent.engage_creator_in_chrome, url, comment, auto_submit=False)
+                engage_res = await asyncio.to_thread(agent.engage_creator_in_chrome, url, comment, auto_submit=True)
                 like_status = "👍 Liked Post" if "liked" in engage_res.get("like_status", "") else "👍 Liked"
-                comment_status = "💬 Comment Primed in Chrome" if "populated" in engage_res.get("comment_status", "") else "💬 Comment Prepared"
+                comment_status = "💬 Comment Posted Live!" if engage_res.get("comment_status") == "posted_live" else "💬 Comment Primed in Chrome"
             except Exception:
                 like_status = "👍 Post Targeted"
                 comment_status = "💬 Comment Ready"

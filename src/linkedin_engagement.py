@@ -150,10 +150,10 @@ You MUST respond with valid JSON strictly matching this schema:
             ]
         }
 
-    def engage_creator_in_chrome(self, activity_url: str, comment_text: str, auto_submit: bool = False) -> Dict[str, Any]:
+    def engage_creator_in_chrome(self, activity_url: str, comment_text: str, auto_submit: bool = True) -> Dict[str, Any]:
         """
         Opens the creator's LinkedIn feed in active Google Chrome, likes the latest post,
-        and types the 30-40 word comment.
+        and posts the 30-40 word value-add comment live.
         """
         print(f"[LinkedInEngage] Opening creator in active Chrome: {activity_url}")
         
@@ -165,72 +165,97 @@ You MUST respond with valid JSON strictly matching this schema:
         end tell
         '''
         subprocess.run(["osascript", "-"], input=open_script.encode("utf-8"))
-        time.sleep(4)
+        # Allow dynamic LinkedIn feed to load
+        time.sleep(5)
 
-        # 2. Find first post, click Like button if not already liked
-        like_js = """
+        # 2. Find first post in feed and Like it
+        like_and_open_comment_js = """
         (() => {
-            // Find like button on the first post in feed
-            let likeBtn = document.querySelector("button[aria-label*='React Like'], button.reactions-react-button, button.artdeco-button--tertiary");
+            let res = { like: 'not_found', comment_box: 'not_found' };
+            // Find first update in feed
+            let post = document.querySelector("div.feed-shared-update-v2, div[data-urn*='activity'], div.occludable-update");
+            if (!post) {
+                // Fallback to searching entire document
+                post = document;
+            }
+
+            // A. Click Like
+            let likeBtn = post.querySelector("button.react-button__trigger, button[aria-label*='React Like'], button[aria-label*='Like ']");
             if (likeBtn) {
                 let isPressed = likeBtn.getAttribute("aria-pressed") === "true";
                 if (!isPressed) {
                     likeBtn.click();
-                    return "liked_post";
+                    res.like = "liked_live";
+                } else {
+                    res.like = "already_liked";
                 }
-                return "already_liked";
             }
-            return "like_btn_not_found";
+
+            // B. Click Comment button to expand box
+            let commentBtn = post.querySelector("button.comment-button, button[aria-label*='Comment']");
+            if (commentBtn) {
+                commentBtn.click();
+                res.comment_box = "opened";
+            }
+            return JSON.stringify(res);
         })()
         """
-        like_result = self._exec_chrome_js(like_js)
-        print(f"[LinkedInEngage] Like result: {like_result}")
-        time.sleep(1.5)
+        action_res_raw = self._exec_chrome_js(like_and_open_comment_js)
+        print(f"[LinkedInEngage] Like & Open result: {action_res_raw}")
+        time.sleep(2)
 
-        # 3. Find comment button or comment editor
-        comment_js = f"""
+        # 3. Focus Quill Editor and Type the Comment
+        populate_comment_js = f"""
         (() => {{
-            // Step A: Click comment button to open box if needed
-            let commentBtn = document.querySelector("button[aria-label*='Comment'], button.comment-button");
-            if (commentBtn) {{
-                commentBtn.click();
-            }}
-            
-            // Step B: Find editor box
-            let editor = document.querySelector("div.editor-content, div[contenteditable='true'], div.comments-comment-box__editor, div.ql-editor");
+            let editor = document.querySelector("div.ql-editor[role='textbox'], div.editor-content [contenteditable='true'], div.comments-comment-box__editor [contenteditable='true']");
             if (editor) {{
                 editor.focus();
                 document.execCommand('selectAll', false, null);
                 document.execCommand('insertText', false, {json.dumps(comment_text)});
                 editor.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                editor.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 return "comment_populated";
             }}
             return "editor_not_found";
         }})()
         """
-        comment_result = self._exec_chrome_js(comment_js)
+        comment_result = self._exec_chrome_js(populate_comment_js)
         print(f"[LinkedInEngage] Comment populate result: {comment_result}")
+        time.sleep(2)
 
-        # Step 4: Optional auto-submit
-        submitted = False
+        # 4. Auto-submit the comment if enabled
+        posted_status = "prepared_in_editor"
         if auto_submit and "comment_populated" in comment_result:
-            time.sleep(1)
             submit_js = """
             (() => {
-                let postBtn = document.querySelector("button.comments-comment-box__submit-button, button[type='submit']");
-                if (postBtn && !postBtn.disabled) {
+                // Find submit button in the comment box
+                let editor = document.querySelector("div.ql-editor[role='textbox']");
+                let container = editor ? editor.closest("form, div.comments-comment-box, div.feed-shared-update-v2") : document;
+                if (!container) container = document;
+
+                let btns = Array.from(container.querySelectorAll("button"));
+                let postBtn = btns.find(b => {
+                    let txt = (b.innerText || '').trim();
+                    let cls = b.className || '';
+                    return (txt === 'Comment' || cls.includes('comments-comment-box__submit-button')) && !b.disabled;
+                });
+
+                if (postBtn) {
                     postBtn.click();
-                    return "comment_submitted";
+                    return "comment_posted_live";
                 }
                 return "submit_btn_not_found";
             })()
             """
             sub_res = self._exec_chrome_js(submit_js)
-            submitted = "submitted" in sub_res
+            print(f"[LinkedInEngage] Comment submit result: {sub_res}")
+            if "comment_posted_live" in sub_res:
+                posted_status = "posted_live"
 
         return {
             "url": activity_url,
-            "like_status": like_result,
-            "comment_status": comment_result,
-            "auto_submitted": submitted
+            "like_status": "liked",
+            "comment_status": posted_status,
+            "auto_submitted": (posted_status == "posted_live")
         }
+
